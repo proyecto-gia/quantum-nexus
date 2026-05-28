@@ -2,6 +2,7 @@
 
 PROHIBIDO pasar de PAPER a LIVE sin input() explícito + 2FA simulada.
 """
+
 from __future__ import annotations
 
 import logging

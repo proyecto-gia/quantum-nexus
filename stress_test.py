@@ -12,6 +12,7 @@ Uso:
     python stress_test.py            # corrida completa (10k x 60s)
     python stress_test.py --quick    # corrida corta de humo (10k x 2s)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,9 +24,9 @@ import time
 import psutil
 
 SYMBOL = "BTCUSDT"
-TARGET_TPS = 10_000          # ticks por segundo
-DEFAULT_DURATION_S = 60      # duración sostenida
-QUEUE_SIZE = 10_000          # backpressure: cola acotada
+TARGET_TPS = 10_000  # ticks por segundo
+DEFAULT_DURATION_S = 60  # duración sostenida
+QUEUE_SIZE = 10_000  # backpressure: cola acotada
 
 
 def make_tick() -> bytes:
@@ -38,7 +39,7 @@ def make_tick() -> bytes:
     return json.dumps(payload).encode()
 
 
-async def producer(q: asyncio.Queue[bytes], duration_s: int, stats: dict) -> None:
+async def producer(q: asyncio.Queue[bytes], duration_s: int, stats: dict[str, float]) -> None:
     """Inyecta TARGET_TPS ticks/s. Si la cola está llena -> drop contado (backpressure)."""
     interval = 1.0 / TARGET_TPS
     deadline = time.perf_counter() + duration_s
@@ -56,7 +57,7 @@ async def producer(q: asyncio.Queue[bytes], duration_s: int, stats: dict) -> Non
     await q.put(b"__STOP__")
 
 
-async def consumer(q: asyncio.Queue[bytes], stats: dict) -> None:
+async def consumer(q: asyncio.Queue[bytes], stats: dict[str, float]) -> None:
     """Recibe, parsea y mide latencia end-to-end por tick."""
     while True:
         raw = await q.get()
@@ -77,10 +78,18 @@ async def run(duration_s: int) -> None:
     rss_before = proc.memory_info().rss
 
     q: asyncio.Queue[bytes] = asyncio.Queue(maxsize=QUEUE_SIZE)
-    stats = {"sent": 0, "received": 0, "dropped": 0, "lat_sum": 0.0, "lat_max": 0.0}
+    stats: dict[str, float] = {
+        "sent": 0,
+        "received": 0,
+        "dropped": 0,
+        "lat_sum": 0.0,
+        "lat_max": 0.0,
+    }
 
-    print(f">> Stress test: {TARGET_TPS:,} ticks/s x {duration_s}s "
-          f"(objetivo {TARGET_TPS * duration_s:,} ticks)")
+    print(
+        f">> Stress test: {TARGET_TPS:,} ticks/s x {duration_s}s "
+        f"(objetivo {TARGET_TPS * duration_s:,} ticks)"
+    )
     t0 = time.perf_counter()
     await asyncio.gather(producer(q, duration_s, stats), consumer(q, stats))
     wall = time.perf_counter() - t0

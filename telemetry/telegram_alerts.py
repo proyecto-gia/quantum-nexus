@@ -2,6 +2,7 @@
 
 El fallo del canal NUNCA tumba el sistema (skill: telegram_alert).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,11 +26,12 @@ class TelegramAlerts:
         for attempt in range(retries):
             try:
                 import aiohttp  # import diferido: el módulo no debe romper si falta
+
                 async with aiohttp.ClientSession() as s:
                     async with s.post(url, json=payload, timeout=5) as r:
                         if r.status == 200:
                             return
             except Exception as exc:  # inquebrantable: jamás propaga
                 log.warning("Fallo Telegram (intento %d): %s", attempt + 1, exc)
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
         log.error("Alerta no entregada tras %d intentos: %s", retries, text)

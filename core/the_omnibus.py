@@ -4,6 +4,7 @@ Punto único de coordinación entre módulos. Aplica backpressure con colas
 acotadas y cuenta los drops (skill: hft_async). El core NO conoce a execution
 ni telemetry: éstos se suscriben hacia adentro.
 """
+
 from __future__ import annotations
 
 import asyncio

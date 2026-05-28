@@ -4,6 +4,7 @@ NOTA DE DISEÑO (> ultrathink): contención fail-safe. Estado por defecto ARMED.
 Cualquier breach dispara TRIPPED de forma irreversible hasta reset manual, y emite
 KillSwitchEvent. Diseñado para detener el enjambre en <50 ms.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,9 +15,9 @@ log = logging.getLogger("aegis")
 
 @dataclass
 class RiskLimits:
-    max_drawdown_pct: float = 5.0      # corte duro de pérdida
-    max_latency_ms: float = 250.0      # si la decisión tarda más, sospecha
-    max_dropped_pct: float = 1.0       # saturación del pipeline
+    max_drawdown_pct: float = 5.0  # corte duro de pérdida
+    max_latency_ms: float = 250.0  # si la decisión tarda más, sospecha
+    max_dropped_pct: float = 1.0  # saturación del pipeline
 
 
 @dataclass

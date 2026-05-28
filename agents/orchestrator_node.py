@@ -4,6 +4,7 @@ Esqueleto compatible con un grafo de estados estilo LangGraph: define los nodos
 (decide -> audit -> execute) y el cableado. La lógica de grafo real se inyecta
 respetando estos contratos.
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,9 +24,9 @@ class Orchestrator:
         self._executor = executor
 
     async def handle_tick(self, tick: Tick) -> dict[str, str] | None:
-        signal = self._cortex.decide(tick)          # nodo: decide
+        signal = self._cortex.decide(tick)  # nodo: decide
         if signal is None:
             return None
-        if not self._auditor.approve(signal):        # nodo: audit (Zero-Trust)
+        if not self._auditor.approve(signal):  # nodo: audit (Zero-Trust)
             return {"status": "REJECTED"}
         return await self._executor.execute(signal)  # nodo: execute (HitL si LIVE)

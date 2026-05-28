@@ -1,4 +1,5 @@
 """Modelos de dominio compartidos (Clean Architecture: capa interna, sin deps externas salvo pydantic)."""
+
 from __future__ import annotations
 
 import time

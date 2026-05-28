@@ -6,6 +6,7 @@ order-flow imbalance, modelos RL) se inyecta respetando la interfaz Strategy.
 
 Cada Signal se firma con HMAC antes de emitirse (skill: zero_trust).
 """
+
 from __future__ import annotations
 
 import hashlib

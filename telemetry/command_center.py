@@ -1,4 +1,5 @@
 """Command Center — Estado global consolidado del ecosistema."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

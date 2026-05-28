@@ -28,6 +28,7 @@ target-version = "py311"
 [tool.mypy]
 strict = true
 ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

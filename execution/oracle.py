@@ -2,6 +2,7 @@
 
 Productor de TickEvents hacia The Omnibus. No bloquea el loop (skill: hft_async).
 """
+
 from __future__ import annotations
 
 import json

@@ -4,6 +4,7 @@ Actúa como puente LangGraph-style: recibe eventos del Omnibus, extrae el payloa
 Signal, y delega al Executor de la capa execution. Mantiene el conteo de órdenes
 emitidas y rechazos para el Command Center.
 """
+
 from __future__ import annotations
 
 import logging

@@ -3,6 +3,7 @@
 Zero-Trust: verifica la firma HMAC y consulta el estado del Aegis antes de
 permitir que una señal llegue al Executor.
 """
+
 from __future__ import annotations
 
 import hashlib
