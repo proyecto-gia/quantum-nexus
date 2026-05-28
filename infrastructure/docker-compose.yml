@@ -1,3 +1,11 @@
+# Quantum Nexus v9 — Docker Compose
+#
+# Uso:
+#   docker compose --env-file ../.env up -d
+#
+# Todas las variables tienen defaults seguros (PAPER, sin claves reales).
+# HMAC_SECRET es obligatorio: falla explícitamente si no está definido.
+
 services:
   nexus:
     build:
@@ -7,20 +15,42 @@ services:
     container_name: quantum_nexus
     restart: unless-stopped
     environment:
-      ENV: ${ENV:-PAPER}                 # default-deny: PAPER
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_KEY: ${SUPABASE_KEY:-}
-      HMAC_SECRET: ${HMAC_SECRET:-}
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      # ── Core ────────────────────────────────────────────────────────────────
+      ENV:             ${ENV:-PAPER}
+      HMAC_SECRET:     ${HMAC_SECRET:?HMAC_SECRET es obligatorio}
+      TWO_FA_CODE:     ${TWO_FA_CODE:-}
+
+      # ── Feed de mercado ──────────────────────────────────────────────────────
+      SYMBOLS:         ${SYMBOLS:-BTCUSDT}
+      STREAM_TYPE:     ${STREAM_TYPE:-kline_1m}
+
+      # ── Sizing ───────────────────────────────────────────────────────────────
+      CAPITAL_USDT:    ${CAPITAL_USDT:-100.0}
+      NOTIONAL_USDT:   ${NOTIONAL_USDT:-10.0}
+
+      # ── Binance REST (órdenes reales — opcional) ────────────────────────────
+      # Sin estas claves el sistema opera en modo mock (PAPER_FILL).
+      BINANCE_API_KEY:    ${BINANCE_API_KEY:-}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+      BINANCE_TESTNET:    ${BINANCE_TESTNET:-true}
+
+      # ── Telemetría ───────────────────────────────────────────────────────────
+      SUPABASE_URL:    ${SUPABASE_URL:-}
+      SUPABASE_KEY:    ${SUPABASE_KEY:-}
+      TELEGRAM_TOKEN:  ${TELEGRAM_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+
     networks: [nexus_net]
-    read_only: true                      # FS inmutable
-    tmpfs: ["/tmp"]
-    cap_drop: ["ALL"]                    # sin capacidades
+    read_only: true                       # FS de contenedor inmutable
+    tmpfs:
+      - /tmp                              # heartbeat y archivos temporales
+    cap_drop: ["ALL"]                     # sin capacidades del kernel
     security_opt: ["no-new-privileges:true"]
     deploy:
       resources:
-        limits: { cpus: '2.0', memory: 1g }
+        limits:
+          cpus: "2.0"
+          memory: 1g
 
 networks:
   nexus_net:

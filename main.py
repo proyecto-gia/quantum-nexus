@@ -13,6 +13,8 @@ import asyncio
 import logging
 import os
 import signal
+import time
+from pathlib import Path
 
 from agents.executor_node import ExecutorAgentNode
 from agents.orchestrator_node import Orchestrator
@@ -151,6 +153,11 @@ async def run() -> None:
     async def health_loop() -> None:
         while not stop.is_set():
             await asyncio.sleep(30)
+            # Heartbeat para Docker HEALTHCHECK
+            try:
+                Path("/tmp/nexus_heartbeat").write_text(str(int(time.time())))
+            except OSError:
+                pass
             delta = observer.rss_delta_mb()
             dropped = bus.dropped
             snap = center.snapshot()
@@ -178,6 +185,7 @@ async def run() -> None:
 
     await sink.close()
     await executor.close()
+    await telegram.close()
 
     log.info(
         "Apagado limpio | dropped=%d | ram_delta=%.2fMB",
