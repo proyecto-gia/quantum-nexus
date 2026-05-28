@@ -28,7 +28,9 @@ class TelegramAlerts:
                 import aiohttp  # import diferido: el módulo no debe romper si falta
 
                 async with aiohttp.ClientSession() as s:
-                    async with s.post(url, json=payload, timeout=5) as r:
+                    async with s.post(
+                        url, json=payload, timeout=aiohttp.ClientTimeout(total=5)
+                    ) as r:
                         if r.status == 200:
                             return
             except Exception as exc:  # inquebrantable: jamás propaga
