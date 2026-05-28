@@ -92,8 +92,12 @@ async def run() -> None:
     # ── Señal de parada limpia ────────────────────────────────────────────────
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+    except NotImplementedError:
+        # Windows no soporta add_signal_handler; KeyboardInterrupt detiene el loop.
+        pass
 
     await telegram.send("Quantum Nexus v9 iniciado", level="INFO")
     log.info("Pipeline listo. Ctrl+C para detener.")
