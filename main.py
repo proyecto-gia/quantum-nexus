@@ -21,6 +21,7 @@ from core.cortex_ai import CortexAI
 from core.domain import Event, EventType, Tick
 from core.the_aegis import Aegis, RiskLimits
 from core.the_omnibus import TheOmnibus
+from execution.binance_ws import BinanceWebSocketClient
 from execution.executor_node import Executor
 from execution.oracle import Oracle
 from telemetry.command_center import CommandCenter
@@ -35,7 +36,9 @@ logging.basicConfig(
 log = logging.getLogger("main")
 
 ENV = os.environ.get("ENV", "PAPER")
-WS_URL = os.environ.get("WS_URL", "")  # vacío = modo demo con ticks sintéticos
+# SYMBOLS=BTCUSDT  o  SYMBOLS=BTCUSDT,ETHUSDT  →  feed real de Binance
+# Vacío → modo demo con ticks sintéticos
+SYMBOLS = [s.strip() for s in os.environ.get("SYMBOLS", "").split(",") if s.strip()]
 
 
 async def _demo_tick_producer(bus: TheOmnibus, oracle: Oracle, stop: asyncio.Event) -> None:
@@ -112,11 +115,12 @@ async def run() -> None:
     # ── Tareas concurrentes ───────────────────────────────────────────────────
     bus_task = asyncio.create_task(bus.run(), name="omnibus")
 
-    if WS_URL:
-        log.info("Conectando a WebSocket: %s", WS_URL)
-        # Aquí iría el cliente websockets real; se deja como hook de extensión.
-        raise NotImplementedError("WS_URL real aún no implementado; usa modo demo.")
+    if SYMBOLS:
+        log.info("Binance feed activo — symbols=%s", SYMBOLS)
+        ws_client = BinanceWebSocketClient(symbols=SYMBOLS, oracle=oracle)
+        producer_task = asyncio.create_task(ws_client.run(stop), name="binance_ws")
     else:
+        log.info("Modo demo: ticks sinteticos a 10 ticks/s.")
         producer_task = asyncio.create_task(
             _demo_tick_producer(bus, oracle, stop), name="demo_producer"
         )
