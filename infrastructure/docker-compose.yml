@@ -1,0 +1,28 @@
+services:
+  nexus:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+    image: quantum_nexus:v9
+    container_name: quantum_nexus
+    restart: unless-stopped
+    environment:
+      ENV: ${ENV:-PAPER}                 # default-deny: PAPER
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_KEY: ${SUPABASE_KEY:-}
+      HMAC_SECRET: ${HMAC_SECRET:-}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    networks: [nexus_net]
+    read_only: true                      # FS inmutable
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]                    # sin capacidades
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: '2.0', memory: 1g }
+
+networks:
+  nexus_net:
+    driver: bridge
+    internal: false
