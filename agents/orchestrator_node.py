@@ -11,7 +11,7 @@ import logging
 
 from agents.risk_auditor_node import RiskAuditor
 from core.cortex_ai import CortexAI
-from core.domain import Tick
+from core.domain import Side, Tick
 from execution.executor_node import Executor
 from telemetry.supabase_sink import SupabaseSink
 
@@ -55,6 +55,9 @@ class Orchestrator:
             return {"status": "REJECTED"}
 
         result = await self._executor.execute(signal)  # nodo: execute (HitL si LIVE)
+
+        if signal.side in (Side.BUY, Side.SELL) and signal.price > 0.0:
+            self._auditor.record_fill(signal.side, signal.price)
 
         if self._sink:
             await self._sink.log(

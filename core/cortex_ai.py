@@ -29,7 +29,7 @@ class _StubStrategy(Strategy):
     def evaluate(self, tick: Tick) -> Signal | None:
         if tick.volume <= 0:
             return None
-        return Signal(symbol=tick.symbol, side=Side.FLAT, confidence=0.75)
+        return Signal(symbol=tick.symbol, side=Side.FLAT, confidence=0.75, price=tick.price)
 
 
 class MomentumEMAStrategy(Strategy):
@@ -131,7 +131,9 @@ class MomentumEMAStrategy(Strategy):
         if confidence < self._min_conf:
             return None
 
-        return Signal(symbol=tick.symbol, side=side, confidence=round(confidence, 4))
+        return Signal(
+            symbol=tick.symbol, side=side, confidence=round(confidence, 4), price=tick.price
+        )
 
 
 class CortexAI:

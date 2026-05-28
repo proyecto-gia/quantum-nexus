@@ -43,11 +43,12 @@ class Signal(BaseModel):
     symbol: str
     side: Side
     confidence: float = Field(ge=0.0, le=1.0)
+    price: float = 0.0  # precio de mercado al momento de la señal (informacional, no firmado)
     timestamp: int = Field(default_factory=now_ms)
     signature: str | None = None  # HMAC, lo rellena Cortex y lo verifica el Auditor
 
     def canonical_bytes(self) -> bytes:
-        """Representación canónica determinista para firmar/verificar (sin la firma)."""
+        """Representación canónica determinista para firmar/verificar (sin la firma ni el precio)."""
         return f"{self.symbol}|{self.side.value}|{self.confidence}|{self.timestamp}".encode()
 
 

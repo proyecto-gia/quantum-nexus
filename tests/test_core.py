@@ -100,11 +100,104 @@ def test_risk_auditor_approves_valid_signature(monkeypatch: pytest.MonkeyPatch) 
     secret = "test-secret"  # pragma: allowlist secret
     monkeypatch.setenv("HMAC_SECRET", secret)
     aegis = Aegis()
-    auditor = RiskAuditor(aegis=aegis)
+    auditor = RiskAuditor(aegis=aegis, min_signal_interval_s=0.0)
     signal = Signal(symbol="BTCUSDT", side=Side.BUY, confidence=0.8, timestamp=1_000_000)
     sig = hmac_mod.new(secret.encode(), signal.canonical_bytes(), hashlib.sha256).hexdigest()
     signal.signature = sig
     assert auditor.approve(signal)
+
+
+def test_risk_auditor_rejects_low_confidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "test-secret"  # pragma: allowlist secret
+    monkeypatch.setenv("HMAC_SECRET", secret)
+    aegis = Aegis()
+    auditor = RiskAuditor(aegis=aegis, min_confidence=0.75, min_signal_interval_s=0.0)
+    signal = Signal(symbol="BTCUSDT", side=Side.BUY, confidence=0.70, timestamp=1_000_000)
+    sig = hmac_mod.new(secret.encode(), signal.canonical_bytes(), hashlib.sha256).hexdigest()
+    signal.signature = sig
+    assert not auditor.approve(signal)
+
+
+def test_risk_auditor_rejects_signal_spam(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "test-secret"  # pragma: allowlist secret
+    monkeypatch.setenv("HMAC_SECRET", secret)
+    aegis = Aegis()
+    auditor = RiskAuditor(aegis=aegis, min_signal_interval_s=60.0)
+
+    def _signed(ts: int) -> Signal:
+        s = Signal(symbol="BTCUSDT", side=Side.BUY, confidence=0.8, timestamp=ts)
+        s.signature = hmac_mod.new(secret.encode(), s.canonical_bytes(), hashlib.sha256).hexdigest()
+        return s
+
+    assert auditor.approve(_signed(1_000_000))
+    assert not auditor.approve(_signed(1_000_001))
+
+
+def test_risk_auditor_record_fill_tracks_pnl(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    auditor = RiskAuditor(aegis=Aegis(), capital_usdt=100.0, max_position_pct=0.10)
+    auditor.record_fill(Side.BUY, 100.0)
+    auditor.record_fill(Side.SELL, 110.0)  # +10% en 10 USDT notional = +1 USDT
+    assert auditor._daily_pnl_usdt == pytest.approx(1.0)
+    assert auditor._consecutive_losses == 0
+
+
+def test_risk_auditor_resets_streak_on_profit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    auditor = RiskAuditor(aegis=Aegis(), capital_usdt=100.0, max_consecutive_losses=5)
+    auditor.record_fill(Side.BUY, 100.0)
+    auditor.record_fill(Side.SELL, 90.0)  # pérdida → consecutivas=1
+    assert auditor._consecutive_losses == 1
+    auditor.record_fill(Side.BUY, 90.0)
+    auditor.record_fill(Side.SELL, 100.0)  # ganancia → consecutivas=0
+    assert auditor._consecutive_losses == 0
+
+
+def test_risk_auditor_trips_aegis_on_consecutive_losses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    aegis = Aegis()
+    auditor = RiskAuditor(aegis=aegis, capital_usdt=100.0, max_consecutive_losses=2)
+    auditor.record_fill(Side.BUY, 100.0)
+    auditor.record_fill(Side.SELL, 95.0)  # pérdida #1
+    assert auditor._consecutive_losses == 1
+    assert aegis.is_safe()
+    auditor.record_fill(Side.BUY, 95.0)
+    auditor.record_fill(Side.SELL, 90.0)  # pérdida #2 → trip (límite=2)
+    assert not aegis.is_safe()
+    assert "consecutivas" in (aegis.reason or "")
+
+
+def test_risk_auditor_trips_aegis_on_daily_loss(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    aegis = Aegis(limits=RiskLimits(max_daily_loss_pct=3.0))
+    # capital=100, max_position=50% → notional=50 USDT; daily_loss_limit=3 USDT
+    auditor = RiskAuditor(
+        aegis=aegis,
+        capital_usdt=100.0,
+        max_position_pct=0.50,
+        daily_loss_limit_pct=0.03,
+        max_consecutive_losses=99,
+    )
+    auditor.record_fill(Side.BUY, 100.0)
+    auditor.record_fill(Side.SELL, 90.0)  # -10% * 50 USDT = -5 USDT > 3 USDT límite
+    assert not aegis.is_safe()
+    assert "diaria" in (aegis.reason or "")
+
+
+# ── Aegis daily loss ──────────────────────────────────────────────────────────
+
+
+def test_aegis_trips_on_daily_loss() -> None:
+    aegis = Aegis(limits=RiskLimits(max_daily_loss_pct=2.0))
+    aegis.check_daily_loss(2.5)
+    assert aegis.tripped
+    assert "diaria" in (aegis.reason or "")
+
+
+def test_aegis_safe_below_daily_loss() -> None:
+    aegis = Aegis(limits=RiskLimits(max_daily_loss_pct=3.0))
+    aegis.check_daily_loss(2.9)
+    assert not aegis.tripped
 
 
 # ── CortexAI ─────────────────────────────────────────────────────────────────
