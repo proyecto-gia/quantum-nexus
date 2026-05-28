@@ -25,6 +25,7 @@ from execution.executor_node import Executor
 from execution.oracle import Oracle
 from telemetry.command_center import CommandCenter
 from telemetry.observer import Observer
+from telemetry.supabase_sink import SupabaseSink
 from telemetry.telegram_alerts import TelegramAlerts
 
 logging.basicConfig(
@@ -74,12 +75,18 @@ async def run() -> None:
     cortex = CortexAI()
     auditor = RiskAuditor(aegis=aegis)
     executor = Executor()
+    sink = SupabaseSink()
     oracle = Oracle(bus)
-    orchestrator = Orchestrator(cortex=cortex, auditor=auditor, executor=executor)
+    orchestrator = Orchestrator(cortex=cortex, auditor=auditor, executor=executor, sink=sink)
     observer = Observer()
     center = CommandCenter()
     telegram = TelegramAlerts()
     ExecutorAgentNode(bus=bus, executor=executor, aegis=aegis)
+
+    if sink.enabled:
+        log.info("Supabase sink activo — telemetria habilitada.")
+    else:
+        log.info("Supabase sink deshabilitado (SUPABASE_URL/KEY no configuradas).")
 
     observer.mark_baseline()
 
@@ -142,6 +149,8 @@ async def run() -> None:
     bus_task.cancel()
 
     await asyncio.gather(producer_task, health_task, bus_task, return_exceptions=True)
+
+    await sink.close()
 
     log.info(
         "Apagado limpio | dropped=%d | ram_delta=%.2fMB",
