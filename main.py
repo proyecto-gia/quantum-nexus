@@ -39,6 +39,7 @@ ENV = os.environ.get("ENV", "PAPER")
 # SYMBOLS=BTCUSDT  o  SYMBOLS=BTCUSDT,ETHUSDT  →  feed real de Binance
 # Vacío → modo demo con ticks sintéticos
 SYMBOLS = [s.strip() for s in os.environ.get("SYMBOLS", "").split(",") if s.strip()]
+STREAM_TYPE = os.environ.get("STREAM_TYPE", "kline_1m")
 
 
 async def _demo_tick_producer(bus: TheOmnibus, oracle: Oracle, stop: asyncio.Event) -> None:
@@ -116,8 +117,8 @@ async def run() -> None:
     bus_task = asyncio.create_task(bus.run(), name="omnibus")
 
     if SYMBOLS:
-        log.info("Binance feed activo — symbols=%s", SYMBOLS)
-        ws_client = BinanceWebSocketClient(symbols=SYMBOLS, oracle=oracle)
+        log.info("Binance feed activo — symbols=%s stream=%s", SYMBOLS, STREAM_TYPE)
+        ws_client = BinanceWebSocketClient(symbols=SYMBOLS, oracle=oracle, stream_type=STREAM_TYPE)
         producer_task = asyncio.create_task(ws_client.run(stop), name="binance_ws")
     else:
         log.info("Modo demo: ticks sinteticos a 10 ticks/s.")

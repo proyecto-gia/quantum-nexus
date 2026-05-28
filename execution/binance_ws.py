@@ -1,14 +1,16 @@
 """BinanceWebSocketClient — feed de datos de mercado en tiempo real.
 
-Conecta al stream aggTrade de Binance (precios + volumen por trade agregado).
-Normaliza cada mensaje al formato que Oracle.ingest() espera y lo entrega.
+Soporta dos tipos de stream:
+  - "aggTrade"   : cada trade agregado (precio+volumen instantáneo).
+  - "kline_Xm/h" : velas OHLCV; emite Tick sólo al cierre de cada vela.
+                   Ejemplos: "kline_1m", "kline_5m", "kline_1h".
 
-Reconexión automática con backoff exponencial (1 s → 2 s → … → 60 s).
-Binance limita las conexiones a 24 h; el cliente reconecta antes de ese límite.
+Para estrategias EMA (diseñadas con velas OHLCV) usar kline es lo correcto.
+aggTrade produce miles de micro-ticks donde el precio apenas se mueve,
+lo que aplana los EMAs y nunca alcanza el umbral de confianza.
 
-Uso:
-    client = BinanceWebSocketClient(symbols=["BTCUSDT"], oracle=oracle)
-    await client.run(stop_event)
+Reconexión automática con backoff exponencial (1 s → 60 s).
+Binance limita conexiones a 24 h; reconecta antes.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from typing import Any
 
 import websockets
@@ -27,20 +30,21 @@ log = logging.getLogger("binance_ws")
 
 _WS_SINGLE = "wss://stream.binance.com:9443/ws"
 _WS_COMBINED = "wss://stream.binance.com:9443/stream"
-
-# Binance cierra la conexión a las 24 h; reconectamos antes.
 _MAX_CONN_SECONDS = 23 * 3600
 _MAX_BACKOFF = 60.0
 
 
-def _normalize(msg: dict[str, Any]) -> str | None:
-    """Convierte un mensaje aggTrade de Binance al JSON que Oracle espera."""
+def _normalize_aggtrade(msg: dict[str, Any]) -> str | None:
     try:
+        price = float(msg["p"])
+        volume = float(msg["q"])
+        if not math.isfinite(price) or not math.isfinite(volume):
+            return None
         return json.dumps(
             {
                 "symbol": str(msg["s"]),
-                "price": float(msg["p"]),
-                "volume": float(msg["q"]),
+                "price": price,
+                "volume": volume,
                 "timestamp": int(msg["T"]),
             }
         )
@@ -48,23 +52,55 @@ def _normalize(msg: dict[str, Any]) -> str | None:
         return None
 
 
-def _stream_url(symbols: list[str]) -> str:
-    streams = "/".join(f"{s.lower()}@aggTrade" for s in symbols)
+def _normalize_kline(msg: dict[str, Any]) -> str | None:
+    try:
+        k = msg["k"]
+        if not k["x"]:  # solo velas cerradas
+            return None
+        return json.dumps(
+            {
+                "symbol": str(k["s"]),
+                "price": float(k["c"]),  # close
+                "volume": float(k["v"]),  # volumen total de la vela
+                "timestamp": int(k["t"]),  # open time
+            }
+        )
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _normalize(msg: dict[str, Any]) -> str | None:
+    event = msg.get("e")
+    if event == "aggTrade":
+        return _normalize_aggtrade(msg)
+    if event == "kline":
+        return _normalize_kline(msg)
+    return None
+
+
+def _stream_url(symbols: list[str], stream_type: str) -> str:
+    streams = "/".join(f"{s.lower()}@{stream_type}" for s in symbols)
     if len(symbols) == 1:
         return f"{_WS_SINGLE}/{streams}"
     return f"{_WS_COMBINED}?streams={streams}"
 
 
 class BinanceWebSocketClient:
-    def __init__(self, symbols: list[str], oracle: Oracle) -> None:
+    def __init__(
+        self,
+        symbols: list[str],
+        oracle: Oracle,
+        stream_type: str = "kline_1m",
+    ) -> None:
         if not symbols:
             raise ValueError("Se requiere al menos un símbolo")
         self._symbols = [s.strip().upper() for s in symbols]
         self._oracle = oracle
-        self._url = _stream_url(self._symbols)
+        self._stream_type = stream_type
+        self._url = _stream_url(self._symbols, stream_type)
 
     async def run(self, stop: asyncio.Event) -> None:
-        log.info("Binance WS iniciando — symbols=%s", self._symbols)
+        log.info("Binance WS iniciando — symbols=%s stream=%s", self._symbols, self._stream_type)
         backoff = 1.0
 
         while not stop.is_set():
@@ -88,8 +124,7 @@ class BinanceWebSocketClient:
                         try:
                             text = raw.decode() if isinstance(raw, bytes) else raw
                             outer: dict[str, Any] = json.loads(text)
-                            # Combined stream wraps: {"stream": ..., "data": {...}}
-                            msg = outer.get("data", outer)
+                            msg: dict[str, Any] = outer.get("data", outer)
                             normalized = _normalize(msg)
                             if normalized:
                                 await self._oracle.ingest(normalized)
