@@ -9,7 +9,7 @@ import hmac as hmac_mod
 import pytest
 
 from agents.risk_auditor_node import RiskAuditor
-from core.cortex_ai import CortexAI
+from core.cortex_ai import CortexAI, MomentumEMAStrategy, _StubStrategy
 from core.domain import Env, Event, EventType, Side, Signal, Tick
 from core.the_aegis import Aegis, RiskLimits
 from core.the_omnibus import TheOmnibus
@@ -112,7 +112,7 @@ def test_risk_auditor_approves_valid_signature(monkeypatch: pytest.MonkeyPatch) 
 
 def test_cortex_decide_returns_signed_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HMAC_SECRET", "nexus-secret")
-    cortex = CortexAI()
+    cortex = CortexAI(strategy=_StubStrategy())
     tick = Tick(symbol="BTCUSDT", price=60000.0, volume=1.0)
     signal = cortex.decide(tick)
     assert signal is not None
@@ -122,9 +122,52 @@ def test_cortex_decide_returns_signed_signal(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_cortex_decide_returns_none_on_zero_volume(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HMAC_SECRET", "nexus-secret")
-    cortex = CortexAI()
+    cortex = CortexAI(strategy=_StubStrategy())
     tick = Tick(symbol="BTCUSDT", price=60000.0, volume=0.0)
     assert cortex.decide(tick) is None
+
+
+# ── MomentumEMAStrategy ───────────────────────────────────────────────────────
+
+
+def _make_ticks(symbol: str, start_price: float, pct_change: float, n: int) -> list[Tick]:
+    ticks = []
+    price = start_price
+    for _ in range(n):
+        ticks.append(Tick(symbol=symbol, price=price, volume=1.0))
+        price *= 1.0 + pct_change
+    return ticks
+
+
+def test_momentum_ema_no_signal_during_warmup() -> None:
+    strategy = MomentumEMAStrategy()
+    for tick in _make_ticks("BTCUSDT", 60000.0, 0.005, MomentumEMAStrategy.SLOW - 1):
+        assert strategy.evaluate(tick) is None
+
+
+def test_momentum_ema_buy_on_uptrend() -> None:
+    strategy = MomentumEMAStrategy()
+    ticks = _make_ticks("BTCUSDT", 60000.0, 0.005, 40)
+    signals = [strategy.evaluate(t) for t in ticks]
+    buy_signals = [s for s in signals if s is not None and s.side == Side.BUY]
+    assert len(buy_signals) > 0
+    for s in buy_signals:
+        assert MomentumEMAStrategy.MIN_CONF <= s.confidence <= 1.0
+
+
+def test_momentum_ema_sell_on_downtrend() -> None:
+    strategy = MomentumEMAStrategy()
+    ticks = _make_ticks("BTCUSDT", 60000.0, -0.005, 40)
+    signals = [strategy.evaluate(t) for t in ticks]
+    sell_signals = [s for s in signals if s is not None and s.side == Side.SELL]
+    assert len(sell_signals) > 0
+
+
+def test_momentum_ema_no_signal_on_flat_price() -> None:
+    strategy = MomentumEMAStrategy()
+    ticks = _make_ticks("BTCUSDT", 60000.0, 0.0, 50)
+    signals = [s for s in (strategy.evaluate(t) for t in ticks) if s is not None]
+    assert len(signals) == 0
 
 
 # ── Executor ─────────────────────────────────────────────────────────────────

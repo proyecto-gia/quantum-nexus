@@ -8,7 +8,7 @@ import pytest
 
 from agents.orchestrator_node import Orchestrator
 from agents.risk_auditor_node import RiskAuditor
-from core.cortex_ai import CortexAI
+from core.cortex_ai import CortexAI, _StubStrategy
 from core.domain import Event, EventType, Tick
 from core.the_aegis import Aegis
 from core.the_omnibus import TheOmnibus
@@ -28,7 +28,7 @@ async def test_full_pipeline_paper_fill() -> None:
     """Un tick válido recorre todo el pipeline y produce un PAPER_FILL."""
     bus = TheOmnibus(queue_size=100)
     aegis = Aegis()
-    cortex = CortexAI()
+    cortex = CortexAI(strategy=_StubStrategy())
     auditor = RiskAuditor(aegis=aegis)
     executor = Executor(env=Env.PAPER)
     oracle = Oracle(bus)
@@ -67,7 +67,7 @@ async def test_pipeline_rejects_zero_volume() -> None:
     """Un tick con volumen 0 no produce resultado (CortexAI devuelve None)."""
     bus = TheOmnibus(queue_size=100)
     aegis = Aegis()
-    cortex = CortexAI()
+    cortex = CortexAI(strategy=_StubStrategy())
     auditor = RiskAuditor(aegis=aegis)
     executor = Executor(env=Env.PAPER)
     oracle = Oracle(bus)
@@ -103,7 +103,7 @@ async def test_pipeline_blocked_when_aegis_tripped() -> None:
     bus = TheOmnibus(queue_size=100)
     aegis = Aegis()
     aegis._trip("test")
-    cortex = CortexAI()
+    cortex = CortexAI(strategy=_StubStrategy())
     auditor = RiskAuditor(aegis=aegis)
     executor = Executor(env=Env.PAPER)
     oracle = Oracle(bus)
