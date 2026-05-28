@@ -52,6 +52,9 @@ class RiskAuditor:
         self._last_signal_ts: float = 0.0
         self._open_side: Side | None = None
         self._open_price: float = 0.0
+        # Tracking acumulado para drawdown
+        self._cumulative_pnl_usdt: float = 0.0
+        self._peak_pnl_usdt: float = 0.0
 
     def _reset_daily_if_needed(self) -> None:
         today = date.today()
@@ -104,13 +107,15 @@ class RiskAuditor:
 
         return True
 
-    def record_fill(self, side: Side, price: float) -> None:
-        """Registra un fill ejecutado para tracking de P&L y circuit breakers.
+    def record_fill(self, side: Side, price: float) -> float:
+        """Registra un fill ejecutado. Retorna P&L en USDT del trade cerrado (0.0 si solo abre).
 
         Debe llamarse después de cada ejecución exitosa en el Orchestrator.
         """
         if side not in (Side.BUY, Side.SELL) or price <= 0.0:
-            return
+            return 0.0
+
+        pnl_usdt = 0.0
 
         if self._open_side is not None and self._open_side != side and self._open_price > 0.0:
             if self._open_side == Side.BUY:
@@ -120,6 +125,9 @@ class RiskAuditor:
 
             pnl_usdt = pnl_pct * self._max_notional
             self._daily_pnl_usdt += pnl_usdt
+            self._cumulative_pnl_usdt += pnl_usdt
+            if self._cumulative_pnl_usdt > self._peak_pnl_usdt:
+                self._peak_pnl_usdt = self._cumulative_pnl_usdt
 
             if pnl_usdt < 0.0:
                 self._consecutive_losses += 1
@@ -141,5 +149,11 @@ class RiskAuditor:
             if daily_loss > 0.0:
                 self._aegis.check_daily_loss(daily_loss / self._capital * 100.0)
 
+            # Drawdown acumulado desde el pico (puede dispararse incluso sin pérdida diaria)
+            dd_usdt = self._peak_pnl_usdt - self._cumulative_pnl_usdt
+            if dd_usdt > 0.0:
+                self._aegis.check_drawdown(dd_usdt / self._capital * 100.0)
+
         self._open_side = side
         self._open_price = price
+        return pnl_usdt

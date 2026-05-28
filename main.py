@@ -83,6 +83,7 @@ async def _demo_tick_producer(bus: TheOmnibus, oracle: Oracle, stop: asyncio.Eve
 
 
 async def _tick_handler(event: Event, orchestrator: Orchestrator, center: CommandCenter) -> None:
+    center.record_tick()
     tick = Tick(**event.payload)
     result = await orchestrator.handle_tick(tick)
     if result:
@@ -104,10 +105,12 @@ async def run() -> None:
     executor = _build_executor()
     sink = SupabaseSink()
     oracle = Oracle(bus)
-    orchestrator = Orchestrator(cortex=cortex, auditor=auditor, executor=executor, sink=sink)
-    observer = Observer()
     center = CommandCenter()
+    observer = Observer()
     telegram = TelegramAlerts()
+    orchestrator = Orchestrator(
+        cortex=cortex, auditor=auditor, executor=executor, sink=sink, center=center
+    )
     ExecutorAgentNode(bus=bus, executor=executor, aegis=aegis)
 
     if sink.enabled:
@@ -162,11 +165,18 @@ async def run() -> None:
             dropped = bus.dropped
             snap = center.snapshot()
             log.info(
-                "HEALTH | aegis=%s | dropped=%d | ram_delta=%.2fMB | last=%s",
+                "HEALTH | aegis=%s | dropped=%d | ram_delta=%.2fMB | "
+                "trades=%d | win_rate=%s | pnl=%.4f USDT | dd=%.2f%% | "
+                "sig/min=%.1f | tick_age=%.1fs",
                 "OK" if aegis.is_safe() else f"TRIPPED({aegis.reason})",
                 dropped,
                 delta,
-                snap.get("last_result", "—"),
+                snap.get("trades", 0),
+                snap.get("win_rate", "0.0%"),
+                snap.get("total_pnl_usdt", 0.0),
+                snap.get("drawdown_pct", 0.0),
+                snap.get("signals_per_min", 0.0),
+                snap.get("last_tick_age_s", -1.0),
             )
             if not aegis.is_safe():
                 await telegram.send(f"AEGIS TRIPPED: {aegis.reason}", level="CRITICAL")

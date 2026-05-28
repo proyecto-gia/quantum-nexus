@@ -34,7 +34,7 @@ class Executor:
         self._env = env or Env(raw)
         self._binance = binance
         self._notional = notional_usdt
-        self._open_qty: float = 0.0  # unidades del activo base actualmente en posición
+        self._open_qty: dict[str, float] = {}  # symbol → unidades del activo base en posición
 
     def _require_hitl(self) -> None:
         """Gate irreversible: input explícito + 2FA simulada para habilitar LIVE."""
@@ -70,7 +70,7 @@ class Executor:
         try:
             if signal.side == Side.BUY:
                 result = await self._binance.market_buy(signal.symbol, self._notional)
-                self._open_qty = float(result.get("executedQty", 0.0))
+                self._open_qty[signal.symbol] = float(result.get("executedQty", 0.0))
                 avg_price = _avg_fill_price(result.get("fills", []))
                 return {
                     "status": "FILLED",
@@ -81,13 +81,14 @@ class Executor:
                 }
 
             if signal.side == Side.SELL:
-                if self._open_qty <= 0.0:
+                open_qty = self._open_qty.get(signal.symbol, 0.0)
+                if open_qty <= 0.0:
                     log.warning(
                         "SELL solicitado sin posición abierta en %s — omitiendo.", signal.symbol
                     )
                     return {"status": "NO_POSITION", "symbol": signal.symbol, "side": "SELL"}
-                result = await self._binance.market_sell(signal.symbol, self._open_qty)
-                self._open_qty = 0.0
+                result = await self._binance.market_sell(signal.symbol, open_qty)
+                self._open_qty.pop(signal.symbol, None)
                 avg_price = _avg_fill_price(result.get("fills", []))
                 return {
                     "status": "FILLED",

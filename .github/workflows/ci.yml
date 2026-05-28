@@ -39,8 +39,17 @@ jobs:
       - name: Type check (mypy)
         run: mypy .
 
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files
+
       - name: Run tests
+        env:
+          HMAC_SECRET: ci-test-secret  # pragma: allowlist secret
+          ENV: PAPER
         run: pytest --tb=short -q
 
       - name: Stress test (quick)
+        env:
+          HMAC_SECRET: ci-test-secret  # pragma: allowlist secret
+          ENV: PAPER
         run: python stress_test.py --quick

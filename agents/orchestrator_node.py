@@ -13,6 +13,7 @@ from agents.risk_auditor_node import RiskAuditor
 from core.cortex_ai import CortexAI
 from core.domain import Side, Tick
 from execution.executor_node import Executor
+from telemetry.command_center import CommandCenter
 from telemetry.supabase_sink import SupabaseSink
 
 log = logging.getLogger("orchestrator")
@@ -25,16 +26,21 @@ class Orchestrator:
         auditor: RiskAuditor,
         executor: Executor,
         sink: SupabaseSink | None = None,
+        center: CommandCenter | None = None,
     ) -> None:
         self._cortex = cortex
         self._auditor = auditor
         self._executor = executor
         self._sink = sink
+        self._center = center
 
     async def handle_tick(self, tick: Tick) -> dict[str, str] | None:
         signal = self._cortex.decide(tick)  # nodo: decide
         if signal is None:
             return None
+
+        if self._center:
+            self._center.record_signal()
 
         if self._sink:
             await self._sink.log(
@@ -57,7 +63,9 @@ class Orchestrator:
         result = await self._executor.execute(signal)  # nodo: execute (HitL si LIVE)
 
         if signal.side in (Side.BUY, Side.SELL) and signal.price > 0.0:
-            self._auditor.record_fill(signal.side, signal.price)
+            pnl = self._auditor.record_fill(signal.side, signal.price)
+            if self._center:
+                self._center.record_fill(pnl)
 
         if self._sink:
             await self._sink.log(

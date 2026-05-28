@@ -184,6 +184,35 @@ def test_risk_auditor_trips_aegis_on_daily_loss(monkeypatch: pytest.MonkeyPatch)
     assert "diaria" in (aegis.reason or "")
 
 
+def test_risk_auditor_record_fill_returns_pnl(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    auditor = RiskAuditor(aegis=Aegis(), capital_usdt=100.0, max_position_pct=0.10)
+    pnl_open = auditor.record_fill(Side.BUY, 100.0)
+    assert pnl_open == 0.0  # solo abre posición
+    pnl_close = auditor.record_fill(Side.SELL, 110.0)  # +10% * 10 USDT = +1 USDT
+    assert pnl_close == pytest.approx(1.0)
+
+
+def test_risk_auditor_trips_aegis_on_drawdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HMAC_SECRET", "test-secret")
+    aegis = Aegis(limits=RiskLimits(max_drawdown_pct=5.0))
+    # capital=100, max_position=50% → notional=50 USDT
+    auditor = RiskAuditor(
+        aegis=aegis,
+        capital_usdt=100.0,
+        max_position_pct=0.50,
+        max_consecutive_losses=99,
+        daily_loss_limit_pct=0.99,
+    )
+    auditor.record_fill(Side.BUY, 100.0)
+    auditor.record_fill(Side.SELL, 110.0)  # +10% * 50 USDT = +5 USDT (peak=5)
+    assert aegis.is_safe()
+    auditor.record_fill(Side.BUY, 110.0)
+    auditor.record_fill(Side.SELL, 99.0)  # -10% * 50 USDT = -5 USDT (dd=10/100=10% > 5%)
+    assert not aegis.is_safe()
+    assert "rawdown" in (aegis.reason or "")
+
+
 # ── Aegis daily loss ──────────────────────────────────────────────────────────
 
 

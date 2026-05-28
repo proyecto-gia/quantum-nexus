@@ -203,7 +203,7 @@ async def test_executor_filled_buy(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["status"] == "FILLED"
     assert result["side"] == "BUY"
     assert float(result["executedQty"]) > 0
-    assert executor._open_qty == pytest.approx(0.00015384)
+    assert executor._open_qty.get("BTCUSDT") == pytest.approx(0.00015384)
 
 
 @pytest.mark.asyncio
@@ -228,13 +228,13 @@ async def test_executor_filled_sell_after_buy(monkeypatch: pytest.MonkeyPatch) -
 
     buy_signal = Signal(symbol="BTCUSDT", side=Side.BUY, confidence=0.8, price=65000.0)
     await executor.execute(buy_signal)
-    assert executor._open_qty > 0
+    assert executor._open_qty.get("BTCUSDT", 0.0) > 0
 
     sell_signal = Signal(symbol="BTCUSDT", side=Side.SELL, confidence=0.8, price=64870.0)
     result = await executor.execute(sell_signal)
     assert result["status"] == "FILLED"
     assert result["side"] == "SELL"
-    assert executor._open_qty == 0.0
+    assert executor._open_qty.get("BTCUSDT", 0.0) == 0.0
 
 
 @pytest.mark.asyncio

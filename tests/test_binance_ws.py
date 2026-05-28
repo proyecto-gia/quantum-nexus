@@ -192,16 +192,18 @@ async def test_run_ingests_kline_closed(monkeypatch: pytest.MonkeyPatch) -> None
     FakeWS = _make_fake_ws(messages)
     monkeypatch.setattr("websockets.connect", lambda *a, **kw: FakeWS())
 
+    stop = asyncio.Event()
     ingested: list[str] = []
     original = oracle.ingest
 
     async def capture(raw: str | bytes) -> None:
         ingested.append(raw if isinstance(raw, str) else raw.decode())
         await original(raw)
+        stop.set()  # terminate after first tick received
 
     oracle.ingest = capture  # type: ignore[method-assign]
 
-    await client.run(asyncio.Event())
+    await client.run(stop)
 
     assert len(ingested) == 1
     assert json.loads(ingested[0])["price"] == 65100.0
@@ -222,15 +224,17 @@ async def test_run_skips_malformed_messages(monkeypatch: pytest.MonkeyPatch) -> 
     FakeWS = _make_fake_ws(messages)
     monkeypatch.setattr("websockets.connect", lambda *a, **kw: FakeWS())
 
+    stop = asyncio.Event()
     ingested: list[str] = []
     original = oracle.ingest
 
     async def capture(raw: str | bytes) -> None:
         ingested.append(raw if isinstance(raw, str) else raw.decode())
         await original(raw)
+        stop.set()  # terminate after first tick received
 
     oracle.ingest = capture  # type: ignore[method-assign]
 
-    await client.run(asyncio.Event())
+    await client.run(stop)
 
     assert len(ingested) == 1
