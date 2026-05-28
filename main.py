@@ -21,6 +21,7 @@ from core.cortex_ai import CortexAI
 from core.domain import Event, EventType, Tick
 from core.the_aegis import Aegis, RiskLimits
 from core.the_omnibus import TheOmnibus
+from execution.binance_rest import BinanceRestClient
 from execution.binance_ws import BinanceWebSocketClient
 from execution.executor_node import Executor
 from execution.oracle import Oracle
@@ -36,10 +37,27 @@ logging.basicConfig(
 log = logging.getLogger("main")
 
 ENV = os.environ.get("ENV", "PAPER")
-# SYMBOLS=BTCUSDT  o  SYMBOLS=BTCUSDT,ETHUSDT  →  feed real de Binance
-# Vacío → modo demo con ticks sintéticos
 SYMBOLS = [s.strip() for s in os.environ.get("SYMBOLS", "").split(",") if s.strip()]
 STREAM_TYPE = os.environ.get("STREAM_TYPE", "kline_1m")
+NOTIONAL_USDT = float(os.environ.get("NOTIONAL_USDT", "10.0"))
+
+
+def _build_executor() -> Executor:
+    """Construye el Executor inyectando BinanceRestClient si hay claves API."""
+    api_key = os.environ.get("BINANCE_API_KEY", "")
+    api_secret = os.environ.get("BINANCE_API_SECRET", "")
+    testnet = os.environ.get("BINANCE_TESTNET", "false").lower() == "true"
+
+    if api_key and api_secret:
+        binance = BinanceRestClient(api_key=api_key, api_secret=api_secret, testnet=testnet)
+        log.info(
+            "BinanceRestClient activo (testnet=%s, notional=%.2f USDT)", testnet, NOTIONAL_USDT
+        )
+    else:
+        binance = None
+        log.info("BINANCE_API_KEY/SECRET no configuradas — modo mock (PAPER_FILL).")
+
+    return Executor(binance=binance, notional_usdt=NOTIONAL_USDT)
 
 
 async def _demo_tick_producer(bus: TheOmnibus, oracle: Oracle, stop: asyncio.Event) -> None:
@@ -77,8 +95,11 @@ async def run() -> None:
     bus = TheOmnibus(queue_size=10_000)
     aegis = Aegis(limits=RiskLimits())
     cortex = CortexAI()
-    auditor = RiskAuditor(aegis=aegis)
-    executor = Executor()
+    capital = float(os.environ.get("CAPITAL_USDT", "100.0"))
+    auditor = RiskAuditor(
+        aegis=aegis, capital_usdt=capital, max_position_pct=NOTIONAL_USDT / capital
+    )
+    executor = _build_executor()
     sink = SupabaseSink()
     oracle = Oracle(bus)
     orchestrator = Orchestrator(cortex=cortex, auditor=auditor, executor=executor, sink=sink)
@@ -156,6 +177,7 @@ async def run() -> None:
     await asyncio.gather(producer_task, health_task, bus_task, return_exceptions=True)
 
     await sink.close()
+    await executor.close()
 
     log.info(
         "Apagado limpio | dropped=%d | ram_delta=%.2fMB",
