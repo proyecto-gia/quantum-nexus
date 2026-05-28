@@ -1,5 +1,7 @@
 # Quantum Nexus v9
 
+[![CI](https://github.com/proyecto-gia/quantum-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/proyecto-gia/quantum-nexus/actions/workflows/ci.yml)
+
 Institutional-grade algorithmic trading ecosystem built on **Clean Architecture**, **Zero-Trust**, and **event-driven async** principles.
 
 > Phase: Bootstrapping (100 USDT) — default state is `PAPER`. Transition to `LIVE` requires Human-in-the-Loop + 2FA.
