@@ -183,15 +183,39 @@ async def run() -> None:
 
     health_task = asyncio.create_task(health_loop(), name="health")
 
+    # ── Resumen horario por Telegram ──────────────────────────────────────────
+    async def telegram_summary_loop() -> None:
+        while not stop.is_set():
+            await asyncio.sleep(3600)
+            if stop.is_set():
+                break
+            snap = center.snapshot()
+            aegis_status = "OK" if aegis.is_safe() else f"TRIPPED: {aegis.reason}"
+            msg = (
+                f"Quantum Nexus — Resumen horario\n"
+                f"Aegis: {aegis_status}\n"
+                f"Trades: {snap.get('trades', 0)} | Win: {snap.get('win_rate', '0.0%')}\n"
+                f"P&L: {snap.get('total_pnl_usdt', 0.0):.4f} USDT | "
+                f"DD: {snap.get('drawdown_pct', 0.0):.2f}%\n"
+                f"Señales/min: {snap.get('signals_per_min', 0.0):.1f} | "
+                f"Tick age: {snap.get('last_tick_age_s', -1.0):.1f}s | "
+                f"Dropped: {bus.dropped}"
+            )
+            level = "CRITICAL" if not aegis.is_safe() else "INFO"
+            await telegram.send(msg, level=level)
+
+    summary_task = asyncio.create_task(telegram_summary_loop(), name="telegram_summary")
+
     await stop.wait()
 
     log.info("Deteniendo Quantum Nexus...")
     producer_task.cancel()
     health_task.cancel()
+    summary_task.cancel()
     bus.stop()
     bus_task.cancel()
 
-    await asyncio.gather(producer_task, health_task, bus_task, return_exceptions=True)
+    await asyncio.gather(producer_task, health_task, summary_task, bus_task, return_exceptions=True)
 
     await sink.close()
     await executor.close()

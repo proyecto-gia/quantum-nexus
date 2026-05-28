@@ -46,12 +46,12 @@ class MomentumEMAStrategy(Strategy):
       - Solo se emite señal cuando confidence >= MIN_CONF.
     """
 
-    # Defaults — optimizados vía grid search OOS (BTCUSDT 1h 365d, test +32% -5% dd)
+    # Defaults — grid search OOS (BTCUSDT 1h 180d, 2025-05): test +4.49%, DD -8.49%
     FAST: int = 16
-    SLOW: int = 20
+    SLOW: int = 26
     VOL_MA: int = 20
     ROC_N: int = 5
-    MIN_CONF: float = 0.60
+    MIN_CONF: float = 0.65
 
     W_EMA: float = 0.40
     W_VOL: float = 0.35
@@ -60,10 +60,10 @@ class MomentumEMAStrategy(Strategy):
     def __init__(
         self,
         fast: int = 16,
-        slow: int = 20,
+        slow: int = 26,
         vol_ma: int = 20,
         roc_n: int = 5,
-        min_conf: float = 0.60,
+        min_conf: float = 0.65,
         w_ema: float = 0.40,
         w_vol: float = 0.35,
         w_roc: float = 0.25,
